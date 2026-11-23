@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement for QuotaPulse.
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would this help you do?
+      placeholder: "Describe the workflow or problem."
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Suggested solution
+      placeholder: "Describe the behavior you would like."
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - System tray icon & menu
+        - Expanded overview card / Floating orb
+        - Codex (GPT) quota
+        - Antigravity (Gemini / Claude & GPT / Argon) quota
+        - Auto-update & installer
+        - Other
