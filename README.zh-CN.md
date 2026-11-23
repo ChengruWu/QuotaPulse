@@ -53,6 +53,13 @@
 
 实时跟随所选托盘额度源（`GPT`、`GPT·W`、`GEM`、`GEM·W`、`3P`、`3P·W`、`ARGON`），角标展示重置次数或次要周期百分比，鼠标悬停平滑展开卡片。
 
+### Windows 系统托盘实时监控与弹出面板
+
+| 双服务 5h 限额模式（托盘追踪 `Argon` 周额度 `84%`） | 混搭套餐模式（`Codex Plus` 5h/周 + `Gemini Ultra` 纯周额度，托盘追踪 `74%`） |
+| :---: | :---: |
+| <img src="docs/images/quota-tray.png" alt="QuotaPulse Windows 系统托盘实时数字图标与中文双服务 5h 弹出面板预览" width="320" /> | <img src="docs/images/quota-tray-mixed.png" alt="QuotaPulse Windows 系统托盘 Codex Plus 与 Gemini Ultra 混搭套餐英文面板预览" width="320" /> |
+| 真实 Windows 11 任务栏托盘图标实时绘制当前所选额度池百分比，点击图标即在任务栏上方展开总览卡片。 | 支持两个服务各自使用不同订阅档位（有 5h 窗口与纯周额度自动混排），随时在托盘菜单切换展示的额度源。 |
+
 ### 健康状态说明
 
 | 状态 | 触发条件 | 视觉表现 |

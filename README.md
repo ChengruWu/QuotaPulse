@@ -53,6 +53,13 @@ Don't use both services? Hide either one anytime via the topbar slider popover o
 
 Tracks your active tray source (`GPT`, `GPT·W`, `GEM`, `GEM·W`, `3P`, `3P·W`, `ARGON`), shows a corner badge (reset credits or secondary window), and expands smoothly on hover.
 
+### Live Windows System Tray & Taskbar Popup
+
+| Dual 5h + Weekly Mode (Tray Tracking `Argon` `84%`) | Mixed-Tier Mode (`Codex Plus` 5h/Weekly + `Gemini Ultra` Weekly-Only, Tray `74%`) |
+| :---: | :---: |
+| <img src="docs/images/quota-tray.png" alt="QuotaPulse live Windows 11 system tray icon and anchored Chinese dual-service popup preview" width="320" /> | <img src="docs/images/quota-tray-mixed.png" alt="QuotaPulse live Windows 11 system tray icon and English mixed-tier Codex Plus plus Gemini Ultra popup preview" width="320" /> |
+| Renders the active pool's remaining percentage directly on the Windows 11 taskbar tray icon (`32 × 32`) and pops up the overview card right above it on click. | Automatically adapts when one provider has dual `5h` + `Weekly` windows (`Codex Plus`) and the other uses a weekly-only tier (`Gemini Ultra`). |
+
 ### Health State Legend
 
 | State | Condition | Visual Cue |
