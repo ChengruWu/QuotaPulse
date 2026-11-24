@@ -1,6 +1,6 @@
 [package]
 name = "quota-float"
-version = "0.2.0"
+version = "0.2.1"
 description = "QuotaPulse: Windows tray and floating quota monitor for Codex and Antigravity"
 authors = ["QuotaPulse contributors"]
 license = "MIT"

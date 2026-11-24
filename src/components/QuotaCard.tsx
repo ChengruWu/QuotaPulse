@@ -49,6 +49,9 @@ interface CardProps {
   onHover: (hovered: boolean) => void;
   onRefresh?: () => void;
   onOpenAntigravity?: () => void;
+  onSignInAntigravity?: () => void;
+  onCancelSignInAntigravity?: () => void;
+  signingInAntigravity?: boolean;
   refreshing?: boolean;
   notice?: string | null;
   initialShowCreditTip?: boolean;
@@ -75,13 +78,15 @@ function localizedBackendMessage(message: string | null, provider: ProviderSnaps
   if (!message) return null;
   if (language === "en") return message;
   const normalized = message.toLowerCase();
+  if (normalized.includes("sign in directly from quotapulse")) return "Gemini 尚未登录，点击下方「登录 Gemini」即可在浏览器中直接完成授权。";
   if (normalized.includes("no local antigravity login file")) return "未检测到本机 Antigravity 登录文件，请打开 Antigravity 并登录。";
   if (normalized.includes("in use")) return "本机 Antigravity 状态文件正在占用，请稍后刷新。";
   if (normalized.includes("no active antigravity session token")) return "未从本机状态中找到有效的 Antigravity 会话，请打开 Antigravity 登录。";
   if (normalized.includes("not signed in")) return "Antigravity 尚未登录，请打开 Antigravity 并登录。";
   if (normalized.includes("timed out")) return "读取 Antigravity 额度超时，将自动重试。";
   if (normalized.includes("could not be started")) return "无法启动本机 Antigravity CLI，将自动重试。";
-  if (normalized.includes("(401)")) return "Antigravity 登录态已过期 (401)，请打开 Antigravity 刷新登录。";
+  if (normalized.includes("cli version is unsupported")) return "当前本机 Antigravity CLI 版本过旧，请更新插件或 CLI 后重试。";
+  if (normalized.includes("(401)")) return "Antigravity 登录态已过期 (401)，请点击「登录 Gemini」刷新授权。";
   if (normalized.includes("(403)")) return "Antigravity 额度接口拒绝访问 (403)。";
   if (normalized.includes("sign in") || normalized.includes("login")) {
     return provider === "gemini"
@@ -420,12 +425,18 @@ function InlineError({
   language,
   onRefresh,
   onOpenAntigravity,
+  onSignInAntigravity,
+  onCancelSignInAntigravity,
+  signingInAntigravity = false,
 }: {
   snapshot: ProviderSnapshot;
   staleExpired: boolean;
   language: Language;
   onRefresh?: () => void;
   onOpenAntigravity?: () => void;
+  onSignInAntigravity?: () => void;
+  onCancelSignInAntigravity?: () => void;
+  signingInAntigravity?: boolean;
 }) {
   const t = copy[language];
   const message = localizedBackendMessage(snapshot.message, snapshot.provider, language);
@@ -434,7 +445,10 @@ function InlineError({
     : staleExpired
       ? t.staleExpired
       : t.temporarilyUnavailable;
-  const showOpenAntigravity = snapshot.provider === "gemini" && Boolean(onOpenAntigravity);
+  const isGemini = snapshot.provider === "gemini";
+  const showDirectSignIn = isGemini && snapshot.status === "signed_out" && Boolean(onSignInAntigravity);
+  const showOpenAntigravity = isGemini && Boolean(onOpenAntigravity);
+  const showActions = isGemini && (signingInAntigravity || showDirectSignIn || showOpenAntigravity);
 
   return (
     <div className={`inline-error inline-error--${snapshot.status}`} aria-live="polite">
@@ -459,16 +473,55 @@ function InlineError({
           </button>
         ) : null}
       </div>
-      {showOpenAntigravity ? (
+      {showActions ? (
         <div className="inline-error-actions" onMouseDown={(event) => event.stopPropagation()}>
-          <button
-            type="button"
-            className="inline-action-button"
-            onClick={onOpenAntigravity}
-          >
-            <ArrowSquareOut />
-            <span>{t.openAntigravity}</span>
-          </button>
+          {signingInAntigravity ? (
+            <>
+              <button type="button" className="inline-action-button" disabled>
+                <SignIn />
+                <span>{t.signingInGemini}</span>
+              </button>
+              {onCancelSignInAntigravity ? (
+                <button
+                  type="button"
+                  className="inline-action-button inline-action-button--secondary"
+                  onClick={onCancelSignInAntigravity}
+                >
+                  <span>{t.cancelSignIn}</span>
+                </button>
+              ) : null}
+            </>
+          ) : showDirectSignIn ? (
+            <>
+              <button
+                type="button"
+                className="inline-action-button"
+                onClick={onSignInAntigravity}
+              >
+                <SignIn />
+                <span>{t.signInGemini}</span>
+              </button>
+              {showOpenAntigravity ? (
+                <button
+                  type="button"
+                  className="inline-action-button inline-action-button--secondary"
+                  onClick={onOpenAntigravity}
+                >
+                  <ArrowSquareOut />
+                  <span>{t.openAntigravity}</span>
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <button
+              type="button"
+              className="inline-action-button"
+              onClick={onOpenAntigravity}
+            >
+              <ArrowSquareOut />
+              <span>{t.openAntigravity}</span>
+            </button>
+          )}
         </div>
       ) : null}
     </div>
@@ -486,6 +539,9 @@ export const QuotaCard = memo(function QuotaCard({
   onHover,
   onRefresh,
   onOpenAntigravity,
+  onSignInAntigravity,
+  onCancelSignInAntigravity,
+  signingInAntigravity = false,
   refreshing = false,
   notice = null,
   initialShowCreditTip = false,
@@ -880,6 +936,9 @@ export const QuotaCard = memo(function QuotaCard({
                 language={language}
                 onRefresh={onRefresh}
                 onOpenAntigravity={onOpenAntigravity}
+                onSignInAntigravity={onSignInAntigravity}
+                onCancelSignInAntigravity={onCancelSignInAntigravity}
+                signingInAntigravity={signingInAntigravity}
               />
             )}
           </section>

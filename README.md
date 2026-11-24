@@ -7,7 +7,7 @@
 Windows-only system tray monitor and floating desktop widget for **Codex (GPT)** and **Antigravity (Gemini Models, Claude & GPT, Gemini 4 Argon)** — use **either service independently** or monitor **both together** at a glance.
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%2F%2011-0078D4?style=flat-square&logo=windows)](https://github.com/ChengruWu/QuotaPulse/releases/latest)
-[![Version](https://img.shields.io/badge/Version-v0.2.0-4F7DF6?style=flat-square)](https://github.com/ChengruWu/QuotaPulse/releases/latest)
+[![Version](https://img.shields.io/badge/Version-v0.2.1-4F7DF6?style=flat-square)](https://github.com/ChengruWu/QuotaPulse/releases/latest)
 [![Stack](https://img.shields.io/badge/Built%20with-Tauri%202%20%C2%B7%20React%20%C2%B7%20Rust-24C8DB?style=flat-square)](#development--release)
 [![License](https://img.shields.io/badge/License-MIT-22C55E?style=flat-square)](LICENSE)
 
@@ -15,7 +15,7 @@ Windows-only system tray monitor and floating desktop widget for **Codex (GPT)**
 
 <br />
 
-<img src="docs/images/quota-states.png" alt="QuotaPulse v0.2.0 dual-service overview card health states" width="100%" />
+<img src="docs/images/quota-states.png" alt="QuotaPulse v0.2.1 dual-service overview card health states" width="100%" />
 
 </div>
 
@@ -24,7 +24,7 @@ Windows-only system tray monitor and floating desktop widget for **Codex (GPT)**
 ## Highlights
 
 - **Use Codex only, Antigravity only, or both together**: Neither service is required to use the other. Toggle either anytime via the topbar slider menu or tray **Services / 显示服务** submenu—the popup automatically compacts to match (`360 × 240` for Codex-only, `360 × 250`–`316` for Antigravity-only, or `360 × 460` for dual-service), pauses background polling for hidden providers, and never shows missing-login warnings for services you don't use.
-- **All-in-one tier & multi-pool coverage**: Independently reads local **Codex Desktop (GPT)** and **Antigravity** (`Gemini Models` 5h/weekly, `Claude & GPT` 5h/weekly, and `Gemini 4 Argon` weekly) quotas with full fault isolation. Dual-window plans (such as **Codex Plus** and **Gemini Pro**) show both 5h and Weekly windows, while weekly-only tiers (such as **Codex Pro**, **Gemini Ultra**, and **Gemini 4 Argon**) automatically adapt to a clean Weekly-only layout.
+- **All-in-one tier & multi-pool coverage**: Independently reads local **Codex Desktop (GPT)** and **Antigravity** (`Gemini Models` 5h/weekly — including Gemini 4 Neon/Carbon/Argon/Hydrogen — and `Claude & GPT` 5h/weekly, plus legacy `Gemini 4 Argon` weekly when returned) quotas with full fault isolation. Dual-window plans (such as **Codex Plus** and **Gemini Pro**) show both 5h and Weekly windows, while weekly-only tiers (such as **Codex Pro** and **Gemini Ultra**) automatically adapt to a clean Weekly-only layout.
 - **7 selectable taskbar quota sources (5h & Weekly)**: Displays the live remaining percentage directly on the Windows system tray icon (`32 × 32`, with provider-tinted gradients, health-colored borders, and a two-line multi-pool tooltip). Switch anytime between **Codex (GPT)** (`5h` / `Weekly`), **Gemini** (`5h` / `Weekly`), **Claude & GPT** (`5h` / `Weekly`), and **Gemini 4 Argon** (`Weekly`) from the card pills or tray right-click menu.
 - **Multi-source draggable floating orb (`100 × 100`)**: Toggle **Floating widget / 桌面悬浮窗** from the tray menu to float a translucent draggable orb that tracks your active tray quota source (`GPT`, `GPT·W`, `GEM`, `GEM·W`, `3P`, `3P·W`, `ARGON`), shows a corner badge (Codex reset credits or secondary window), expands smoothly on hover while anchoring to screen edges, and supports always-on-top and click-through lock.
 - **Honest health & status indicators**: Healthy (`>= 50%`), caution (`10%–49%`), and critical (`< 10%`) color themes, plus clear stale, signed-out (with one-click **Open Antigravity**), and unavailable states—never fabricates or estimates percentages.
@@ -35,30 +35,30 @@ Windows-only system tray monitor and floating desktop widget for **Codex (GPT)**
 ### Independent Single-Service Mode (GPT Only / Gemini Only)
 
 <div align="center">
-<img src="docs/images/quota-single-service.png" alt="QuotaPulse v0.2.0 single-service GPT only and Gemini only overview cards" width="82%" />
+<img src="docs/images/quota-single-service.png" alt="QuotaPulse v0.2.1 single-service GPT only and Gemini only overview cards" width="82%" />
 </div>
 
 Don't use both services? Hide either one anytime via the topbar slider popover or the tray **Services / 显示服务** submenu. The popup automatically compacts to match the active service (`360 × 240` for **Codex / GPT only**, `360 × 316` for **Antigravity / Gemini only** with sub-pools, or `360 × 250` without sub-pools) and pauses background polling for the hidden provider.
 
 | Weekly-Only Tiers (`Codex Pro` & `Gemini Ultra`) | Codex Reset Credits & Expiration Details |
 | :---: | :---: |
-| <img src="docs/images/quota-weekly-only.png" alt="QuotaPulse v0.2.0 Codex Pro and Gemini Ultra weekly-only overview card" width="320" /> | <img src="docs/images/quota-reset-expiration.png" alt="QuotaPulse v0.2.0 Codex reset credits expiration popover" width="320" /> |
+| <img src="docs/images/quota-weekly-only.png" alt="QuotaPulse v0.2.1 Codex Pro and Gemini Ultra weekly-only overview card" width="320" /> | <img src="docs/images/quota-reset-expiration.png" alt="QuotaPulse v0.2.1 Codex reset credits expiration popover" width="320" /> |
 | Weekly-only subscriptions automatically promote the weekly window to the primary view, hide unavailable `5h` pills, and track weekly quotas cleanly (`GPT·W` / `GEM·W` / `3P·W`). | Read-only display of available Codex reset credits and exact expiration timestamps in a lightweight popover. |
 
 ### Multi-Source Floating Orb (`100 × 100`)
 
 <div align="center">
-<img src="docs/images/quota-orb.png" alt="QuotaPulse v0.2.0 multi-source floating orbs" width="520" />
+<img src="docs/images/quota-orb.png" alt="QuotaPulse v0.2.1 multi-source floating orbs" width="520" />
 </div>
 
 Tracks your active tray source (`GPT`, `GPT·W`, `GEM`, `GEM·W`, `3P`, `3P·W`, `ARGON`), shows a corner badge (reset credits or secondary window), and expands smoothly on hover.
 
 ### Live Windows System Tray & Taskbar Popup
 
-| Dual 5h + Weekly Mode (Tray Tracking `Argon` `84%`) | Mixed-Tier Mode (`Codex Plus` 5h/Weekly + `Gemini Ultra` Weekly-Only, Tray `74%`) |
+| Dual 5h + Weekly Mode (Codex Plus + Gemini Pro, Tray Tracking Gemini `5h` `93%`) | Mixed-Tier Mode (`Codex Plus` 5h/Weekly + `Gemini Ultra` Weekly-Only, Tray `74%`) |
 | :---: | :---: |
-| <img src="docs/images/quota-tray.png" alt="QuotaPulse live Windows 11 system tray icon and anchored Chinese dual-service popup preview" width="320" /> | <img src="docs/images/quota-tray-mixed.png" alt="QuotaPulse live Windows 11 system tray icon and English mixed-tier Codex Plus plus Gemini Ultra popup preview" width="320" /> |
-| Renders the active pool's remaining percentage directly on the Windows 11 taskbar tray icon (`32 × 32`) and pops up the overview card right above it on click. | Automatically adapts when one provider has dual `5h` + `Weekly` windows (`Codex Plus`) and the other uses a weekly-only tier (`Gemini Ultra`). |
+| <img src="docs/images/quota-tray.png" alt="QuotaPulse live Windows 11 system tray icon (93%) and anchored Chinese dual-service popup preview" width="320" /> | <img src="docs/images/quota-tray-mixed.png" alt="QuotaPulse live Windows 11 system tray icon and English mixed-tier Codex Plus plus Gemini Ultra popup preview" width="320" /> |
+| Renders the active pool's remaining percentage (`93%`) directly on the Windows 11 taskbar tray icon (`32 × 32`) and pops up the overview card right above it on click. | Automatically adapts when one provider has dual `5h` + `Weekly` windows (`Codex Plus`) and the other uses a weekly-only tier (`Gemini Ultra`). |
 
 ### Health State Legend
 
@@ -76,7 +76,7 @@ QuotaPulse reads existing local login states on your Windows PC and sends read-o
 | Provider | Local Source | Polling Cadence | Behavior & Fallback |
 | --- | --- | --- | --- |
 | **Codex (GPT)** | `%CODEX_HOME%\auth.json` or `%USERPROFILE%\.codex\auth.json` | Every **10s** | Read-only HTTPS requests to ChatGPT usage & reset-credits endpoints. |
-| **Antigravity** (`Gemini Models`, `Claude & GPT`, `Gemini 4 Argon`) | Prefers silent local official CLI `agy.exe --log-file %TEMP%\quotapulse-agy-poll.log --output-format json --print-timeout 15s -p "/usage"` with `AGY_CLI_DISABLE_AUTO_UPDATE=true` (zero model token consumption) | Every **60s** (or immediately on manual refresh) | Auto-detected in `%USERPROFILE%\.gemini\bin\agy.exe`, standard Antigravity install folders, `PATH`, or `ANTIGRAVITY_CLI_PATH`. Falls back to strictly read-only (`SQLITE_OPEN_READ_ONLY`) reads of `%APPDATA%\Antigravity\User\globalStorage\state.vscdb` (or `Antigravity IDE` / `%USERPROFILE%\.gemini\oauth_creds.json`, customizable via `ANTIGRAVITY_AUTH_PATH`). |
+| **Antigravity** (`Gemini Models`, `Claude & GPT`, `Gemini 4 Argon`) | Silent pre-flight check (`AGY_CLI_CDE_AUTH_ACTION=check`) + `agy.exe --log-file %TEMP%\quotapulse-agy-poll.log --output-format json --print-timeout 15s -p "/usage"` (`AGY_CLI_DISABLE_AUTO_UPDATE=true`, `AGY_CLI_NONINTERACTIVE_HEADLESS=1`); supports one-click in-app **Sign in** (`AGY_CLI_CDE_AUTH_ACTION=login`) | Every **60s** (or immediately on manual refresh) | Auto-detected in `%USERPROFILE%\.gemini\bin\agy.exe`, standard Antigravity install folders, `PATH`, or `ANTIGRAVITY_CLI_PATH`. Signed-out polls stop silently without opening browser tabs; clicking **Sign in** completes browser loopback OAuth via `agy.exe` without launching Antigravity App or VS Code. Falls back to strictly read-only (`SQLITE_OPEN_READ_ONLY`) reads of `%APPDATA%\Antigravity\User\globalStorage\state.vscdb` (or `Antigravity IDE` / `%USERPROFILE%\.gemini\oauth_creds.json`, customizable via `ANTIGRAVITY_AUTH_PATH`). |
 
 > Browser preview (`npm run dev`) uses mock dual-service data. Real quota reading requires the Windows Tauri desktop app and active local logins.
 
@@ -100,8 +100,8 @@ Download the latest Windows build from GitHub Releases:
 
 - **Latest release**: https://github.com/ChengruWu/QuotaPulse/releases/latest
 - **Recommended installers**:
-  - NSIS installer: `QuotaPulse_0.2.0_x64-setup.exe` (default for automatic updates)
-  - MSI package: `QuotaPulse_0.2.0_x64_en-US.msi`
+  - NSIS installer: `QuotaPulse_0.2.1_x64-setup.exe` (default for automatic updates)
+  - MSI package: `QuotaPulse_0.2.1_x64_en-US.msi`
 - **Upgrading from Quota Float v0.1.7**: QuotaPulse preserves the `app.quotafloat.desktop` identifier, `%APPDATA%\app.quotafloat.desktop\preferences.json`, and updater channel so existing settings and automatic updates carry over cleanly.
 
 > **SmartScreen note**: Release installers are not signed with a Windows Authenticode certificate and may trigger Windows SmartScreen warnings on first launch. Tauri auto-updater packages include cryptographic update signatures (`.sig` / `latest.json`) to verify update integrity.

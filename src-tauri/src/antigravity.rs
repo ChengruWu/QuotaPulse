@@ -25,8 +25,12 @@ const MAX_AUTH_BYTES: u64 = 256 * 1024;
 const MAX_DECODE_DEPTH: usize = 12;
 const CLI_PRINT_TIMEOUT: &str = "15s";
 const CLI_HARD_TIMEOUT: Duration = Duration::from_secs(20);
+const CLI_AUTH_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
+const CLI_LOGIN_TIMEOUT: Duration = Duration::from_secs(300);
 const CLI_POLL_LOG_FILENAME: &str = "quotapulse-agy-poll.log";
 const CLI_DISABLE_AUTO_UPDATE_ENV: &str = "AGY_CLI_DISABLE_AUTO_UPDATE";
+const CLI_AUTH_ACTION_ENV: &str = "AGY_CLI_CDE_AUTH_ACTION";
+const CLI_NONINTERACTIVE_HEADLESS_ENV: &str = "AGY_CLI_NONINTERACTIVE_HEADLESS";
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -360,6 +364,7 @@ fn candidate_auth_paths() -> Vec<PathBuf> {
         paths.push(home.join(".gemini").join("antigravity-cli").join("oauth_creds.json"));
         paths.push(home.join(".gemini").join("antigravity-cli").join("credentials.json"));
         paths.push(home.join(".gemini").join("oauth_creds.json"));
+        paths.push(home.join(".gemini").join("jetski-standalone-oauth-token"));
     }
     // Sort existing paths by freshest modification time (including SQLite -wal).
     let mut indexed: Vec<(usize, SystemTime, PathBuf)> = paths
@@ -885,11 +890,44 @@ pub fn launch_antigravity() -> Result<(), String> {
                 .map_err(|_| "Unable to launch Antigravity IDE.".to_string());
         }
     }
+    if let Some(vscode_exe) = find_vscode_with_antigravity_extension() {
+        return std::process::Command::new(vscode_exe)
+            .spawn()
+            .map(|_| ())
+            .map_err(|_| "Unable to launch Visual Studio Code.".to_string());
+    }
     std::process::Command::new("rundll32.exe")
         .args(["url.dll,FileProtocolHandler", "https://antigravity.google/"])
         .spawn()
         .map(|_| ())
         .map_err(|_| "Unable to open Antigravity.".to_string())
+}
+
+fn find_vscode_with_antigravity_extension() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let ext_dir = home.join(".vscode").join("extensions");
+    let has_extension = fs::read_dir(ext_dir).ok()?.flatten().any(|entry| {
+        entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with("google.google-antigravity"))
+    });
+    if !has_extension {
+        return None;
+    }
+    let mut vscode_candidates = Vec::new();
+    if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
+        vscode_candidates.push(
+            local_app_data
+                .join("Programs")
+                .join("Microsoft VS Code")
+                .join("Code.exe"),
+        );
+    }
+    if let Some(program_files) = std::env::var_os("ProgramFiles").map(PathBuf::from) {
+        vscode_candidates.push(program_files.join("Microsoft VS Code").join("Code.exe"));
+    }
+    vscode_candidates.into_iter().find(|path| path.is_file())
 }
 
 fn cli_binary_name() -> &'static str {
@@ -910,6 +948,7 @@ fn candidate_cli_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Some(home) = dirs::home_dir() {
         paths.push(home.join(".gemini").join("bin").join(bin));
+        paths.push(home.join(".gemini").join("antigravity").join("bin").join(bin));
         paths.push(home.join(".local").join("bin").join(bin));
     }
     if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) {
@@ -968,21 +1007,7 @@ fn parse_json_from_cli_stdout(stdout: &[u8]) -> Option<Value> {
 
 fn classify_cli_error(hints: &str) -> (&'static str, &'static str) {
     let lower = hints.to_ascii_lowercase();
-    if lower.contains("not logged in")
-        || lower.contains("not signed in")
-        || lower.contains("sign in")
-        || lower.contains("login required")
-        || lower.contains("authentication required")
-        || lower.contains("to log in")
-        || lower.contains("unauthenticated")
-        || lower.contains("401")
-        || lower.contains("oauth")
-    {
-        (
-            "signed_out",
-            "Antigravity CLI is not signed in. Open Antigravity and sign in.",
-        )
-    } else if lower.contains("429")
+    if lower.contains("429")
         || lower.contains("rate limit")
         || lower.contains("resource_exhausted")
     {
@@ -1002,12 +1027,32 @@ fn classify_cli_error(hints: &str) -> (&'static str, &'static str) {
         || lower.contains("dns")
         || lower.contains("dial tcp")
         || lower.contains("no such host")
+        || lower.contains("tls handshake timeout")
         || lower.contains("unreachable")
         || lower.contains("connection refused")
     {
         (
             "unavailable",
             "Network unavailable. It will retry automatically.",
+        )
+    } else if lower.contains("not logged in")
+        || lower.contains("not signed in")
+        || lower.contains("sign in")
+        || lower.contains("login required")
+        || lower.contains("authentication required")
+        || lower.contains("authentication failed")
+        || lower.contains("to log in")
+        || lower.contains("unauthenticated")
+        || lower.contains("no refresh token")
+        || lower.contains("invalid_grant")
+        || lower.contains("saved token invalid")
+        || lower.contains("empty token")
+        || lower.contains("401")
+        || lower.contains("oauth")
+    {
+        (
+            "signed_out",
+            "Antigravity is not signed in. Sign in directly from QuotaPulse.",
         )
     } else {
         (
@@ -1075,6 +1120,46 @@ fn cli_poll_log_path() -> PathBuf {
     std::env::temp_dir().join(CLI_POLL_LOG_FILENAME)
 }
 
+fn apply_hidden_process_flags(command: &mut tokio::process::Command) {
+    #[cfg(windows)]
+    {
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+    }
+}
+
+fn build_cli_auth_check_command(cli_path: &Path) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(cli_path);
+    command
+        .current_dir(std::env::temp_dir())
+        .env(CLI_AUTH_ACTION_ENV, "check")
+        .env(CLI_DISABLE_AUTO_UPDATE_ENV, "true")
+        .env(CLI_NONINTERACTIVE_HEADLESS_ENV, "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    apply_hidden_process_flags(&mut command);
+    command
+}
+
+fn build_cli_login_command(cli_path: &Path) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(cli_path);
+    command
+        .current_dir(std::env::temp_dir())
+        .env(CLI_AUTH_ACTION_ENV, "login")
+        .env(CLI_DISABLE_AUTO_UPDATE_ENV, "true")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    apply_hidden_process_flags(&mut command);
+    command
+}
+
 fn build_cli_usage_command(cli_path: &Path, log_path: &Path) -> tokio::process::Command {
     let mut command = tokio::process::Command::new(cli_path);
     command
@@ -1090,18 +1175,109 @@ fn build_cli_usage_command(cli_path: &Path, log_path: &Path) -> tokio::process::
         ])
         .current_dir(std::env::temp_dir())
         .env(CLI_DISABLE_AUTO_UPDATE_ENV, "true")
+        .env(CLI_NONINTERACTIVE_HEADLESS_ENV, "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
-    #[cfg(windows)]
-    {
-        command.creation_flags(CREATE_NO_WINDOW);
-    }
+    apply_hidden_process_flags(&mut command);
     command
 }
 
+async fn check_cli_auth(cli_path: &Path) -> Result<(), (&'static str, &'static str)> {
+    let mut command = build_cli_auth_check_command(cli_path);
+    let child = command.spawn().map_err(|_| {
+        (
+            "unavailable",
+            "Antigravity CLI could not be started.",
+        )
+    })?;
+
+    let output = match tokio::time::timeout(CLI_AUTH_CHECK_TIMEOUT, child.wait_with_output()).await {
+        Ok(Ok(output)) => output,
+        Ok(Err(_)) => {
+            return Err((
+                "unavailable",
+                "Antigravity quota service is temporarily unavailable.",
+            ))
+        }
+        Err(_) => {
+            return Err((
+                "unavailable",
+                "Antigravity CLI timed out while reading quota.",
+            ))
+        }
+    };
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let mut hints = String::new();
+    if !output.stdout.is_empty() {
+        hints.push_str(&String::from_utf8_lossy(
+            &output.stdout[..output.stdout.len().min(4096)],
+        ));
+        hints.push(' ');
+    }
+    if !output.stderr.is_empty() {
+        hints.push_str(&String::from_utf8_lossy(
+            &output.stderr[..output.stderr.len().min(4096)],
+        ));
+    }
+    if hints
+        .to_ascii_lowercase()
+        .contains("unknown agy_cli_cde_auth_action")
+    {
+        return Err(("unavailable", "Antigravity CLI version is unsupported."));
+    }
+    if hints.trim().is_empty() {
+        return Err((
+            "signed_out",
+            "Antigravity is not signed in. Sign in directly from QuotaPulse.",
+        ));
+    }
+    Err(classify_cli_error(&hints))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignInOutcome {
+    Authenticated,
+    LaunchedExternalApp,
+    Cancelled,
+}
+
+pub async fn sign_in_via_cli_or_launch(
+    mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+) -> Result<SignInOutcome, String> {
+    if let Some(cli_path) = find_cli_binary() {
+        let mut child = build_cli_login_command(&cli_path)
+            .spawn()
+            .map_err(|_| "Unable to start Antigravity sign-in.".to_string())?;
+        tokio::select! {
+            res = child.wait() => match res {
+                Ok(status) if status.success() => Ok(SignInOutcome::Authenticated),
+                _ => Err("Gemini sign-in did not complete. Please try again.".to_string()),
+            },
+            _ = &mut cancel_rx => {
+                let _ = child.kill().await;
+                Ok(SignInOutcome::Cancelled)
+            },
+            _ = tokio::time::sleep(CLI_LOGIN_TIMEOUT) => {
+                let _ = child.kill().await;
+                Err("Browser sign-in timed out. Please try again.".to_string())
+            },
+        }
+    } else {
+        launch_antigravity()?;
+        Ok(SignInOutcome::LaunchedExternalApp)
+    }
+}
+
 async fn fetch_via_cli(cli_path: &Path) -> Result<ParsedQuota, (&'static str, &'static str)> {
+    // Run non-interactive auth pre-flight first so signed-out state never spawns `agy -p /usage`,
+    // which otherwise opens a manual OOB verification code tab in the browser every poll cycle.
+    check_cli_auth(cli_path).await?;
     let log_path = cli_poll_log_path();
     let _ = fs::write(&log_path, b"");
     let mut command = build_cli_usage_command(cli_path, &log_path);
@@ -1685,7 +1861,59 @@ mod tests {
             std::ffi::OsStr::new("AGY_CLI_DISABLE_AUTO_UPDATE"),
             Some(std::ffi::OsStr::new("true"))
         )));
+        assert!(envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_NONINTERACTIVE_HEADLESS"),
+            Some(std::ffi::OsStr::new("1"))
+        )));
         assert!(!envs.iter().any(|(k, _)| *k == std::ffi::OsStr::new("SSH_CLIENT")));
+    }
+
+    #[test]
+    fn builds_silent_auth_check_and_loopback_login_commands() {
+        let cli_path = Path::new("agy.exe");
+
+        let check_cmd = build_cli_auth_check_command(cli_path);
+        let check_std = check_cmd.as_std();
+        assert_eq!(check_std.get_args().count(), 0);
+        let check_envs: Vec<(&std::ffi::OsStr, Option<&std::ffi::OsStr>)> =
+            check_std.get_envs().collect();
+        assert!(check_envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_CDE_AUTH_ACTION"),
+            Some(std::ffi::OsStr::new("check"))
+        )));
+        assert!(check_envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_DISABLE_AUTO_UPDATE"),
+            Some(std::ffi::OsStr::new("true"))
+        )));
+        assert!(check_envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_NONINTERACTIVE_HEADLESS"),
+            Some(std::ffi::OsStr::new("1"))
+        )));
+
+        let login_cmd = build_cli_login_command(cli_path);
+        let login_std = login_cmd.as_std();
+        assert_eq!(login_std.get_args().count(), 0);
+        let login_envs: Vec<(&std::ffi::OsStr, Option<&std::ffi::OsStr>)> =
+            login_std.get_envs().collect();
+        assert!(login_envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_CDE_AUTH_ACTION"),
+            Some(std::ffi::OsStr::new("login"))
+        )));
+        assert!(login_envs.contains(&(
+            std::ffi::OsStr::new("AGY_CLI_DISABLE_AUTO_UPDATE"),
+            Some(std::ffi::OsStr::new("true"))
+        )));
+    }
+
+    #[test]
+    fn classifies_offline_oauth_refresh_as_unavailable_not_signed_out() {
+        let offline = classify_cli_error(
+            r#"Post "https://oauth2.googleapis.com/token": dial tcp: lookup oauth2.googleapis.com: no such host"#,
+        );
+        assert_eq!(offline.0, "unavailable");
+
+        let signed_out = classify_cli_error("Authentication failed: no refresh token");
+        assert_eq!(signed_out.0, "signed_out");
     }
 
     #[tokio::test]

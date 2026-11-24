@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { QuotaCard, QuotaOrb } from "./components/QuotaCard";
 import {
+  cancelAntigravitySignIn,
   expandedHeightFor,
   fetchSnapshots,
+  getAntigravitySignInState,
   getPreferences,
   listenDesktopEvents,
   openAntigravity,
   setAlwaysOnTop,
   setWidgetExpanded,
+  signInAntigravity,
   startDragging,
   updatePreferences,
   type WindowPresentation,
@@ -53,6 +56,7 @@ export default function App() {
   const [compact, setCompact] = useState(() => window.innerWidth <= 120 || window.innerHeight <= 120);
   const [presentation, setPresentation] = useState<WindowPresentation>("floating");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isSigningInGemini, setIsSigningInGemini] = useState(false);
   const [operationError, setOperationError] = useState<string | null>(null);
   const refreshing = useRef(false);
   const preferencesRef = useRef(preferences);
@@ -121,6 +125,9 @@ export default function App() {
     void getPreferences()
       .then((value) => setPreferences(normalizePrefs(value)))
       .catch(() => setOperationError("Unable to read settings. Defaults are in use."));
+    void getAntigravitySignInState()
+      .then((value) => setIsSigningInGemini(value))
+      .catch(() => undefined);
   }, [refresh]);
 
   useEffect(() => {
@@ -141,6 +148,7 @@ export default function App() {
         setPresentation(value);
         setCompact(value !== "popup");
       },
+      onAntigravitySignInState: (signingIn) => setIsSigningInGemini(signingIn),
     }).then((value) => {
       if (cancelled) value();
       else cleanup = value;
@@ -232,6 +240,20 @@ export default function App() {
         setOperationError(null);
         void openAntigravity().catch(() => setOperationError("Unable to open Antigravity."));
       }}
+      onSignInAntigravity={() => {
+        setOperationError(null);
+        setIsSigningInGemini(true);
+        void signInAntigravity()
+          .then((values) => setSnapshots(values))
+          .catch((error) =>
+            setOperationError(typeof error === "string" ? error : "Unable to sign in to Gemini."),
+          )
+          .finally(() => setIsSigningInGemini(false));
+      }}
+      onCancelSignInAntigravity={() => {
+        void cancelAntigravitySignIn();
+      }}
+      signingInAntigravity={isSigningInGemini}
       refreshing={isRefreshing}
       notice={operationError}
     />

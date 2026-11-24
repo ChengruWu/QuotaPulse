@@ -67,12 +67,6 @@ const mockSnapshots: ProviderSnapshot[] = [
         shortWindow: { remainingPercent: 0, resetsAt: new Date(Date.now() + 232 * 60_000).toISOString(), windowSeconds: 18_000 },
         weeklyWindow: { remainingPercent: 44, resetsAt: new Date(Date.now() + 6.9 * 86_400_000).toISOString(), windowSeconds: 604_800 },
       },
-      {
-        id: "gemini_argon",
-        displayName: "Gemini 4 Argon",
-        shortWindow: null,
-        weeklyWindow: { remainingPercent: 100, resetsAt: null, windowSeconds: 604_800 },
-      },
     ],
     resetCredits: null,
     resetCreditExpiresAt: [],
@@ -126,6 +120,24 @@ export async function openAntigravity(): Promise<void> {
   await invoke("open_antigravity");
 }
 
+export async function signInAntigravity(): Promise<ProviderSnapshot[]> {
+  if (!isTauri()) return mockSnapshots;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<ProviderSnapshot[]>("sign_in_antigravity");
+}
+
+export async function cancelAntigravitySignIn(): Promise<void> {
+  if (!isTauri()) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("cancel_antigravity_sign_in");
+}
+
+export async function getAntigravitySignInState(): Promise<boolean> {
+  if (!isTauri()) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<boolean>("get_antigravity_sign_in_state");
+}
+
 let widgetResize = Promise.resolve();
 
 async function resizeWidget(expanded: boolean, expandedHeight: number): Promise<void> {
@@ -169,6 +181,7 @@ export async function listenDesktopEvents(handlers: {
   onRefresh: () => void;
   onSnapshots: (value: ProviderSnapshot[]) => void;
   onPresentation: (value: WindowPresentation) => void;
+  onAntigravitySignInState?: (signingIn: boolean) => void;
 }): Promise<() => void> {
   if (!isTauri()) return () => undefined;
   const { listen } = await import("@tauri-apps/api/event");
@@ -176,5 +189,14 @@ export async function listenDesktopEvents(handlers: {
   const unlistenRefresh = await listen("refresh-requested", handlers.onRefresh);
   const unlistenSnapshots = await listen<ProviderSnapshot[]>("snapshots-changed", (event) => handlers.onSnapshots(event.payload));
   const unlistenPresentation = await listen<WindowPresentation>("window-presentation-changed", (event) => handlers.onPresentation(event.payload));
-  return () => { unlistenPreferences(); unlistenRefresh(); unlistenSnapshots(); unlistenPresentation(); };
+  const unlistenSignInState = handlers.onAntigravitySignInState
+    ? await listen<boolean>("antigravity-signin-state", (event) => handlers.onAntigravitySignInState?.(event.payload))
+    : undefined;
+  return () => {
+    unlistenPreferences();
+    unlistenRefresh();
+    unlistenSnapshots();
+    unlistenPresentation();
+    unlistenSignInState?.();
+  };
 }

@@ -20,7 +20,7 @@ body:
     id: version
     attributes:
       label: QuotaPulse version
-      placeholder: "Example: v0.2.0"
+      placeholder: "Example: v0.2.1"
     validations:
       required: true
   - type: textarea

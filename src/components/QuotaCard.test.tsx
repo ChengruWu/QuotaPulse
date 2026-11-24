@@ -96,6 +96,9 @@ function renderCard(
   onSelectTrayProvider: (target: TrayProviderId) => void = noop,
   onOpenAntigravity: () => void = noop,
   onToggleService: (provider: ProviderId) => void = noop,
+  onSignInAntigravity?: () => void,
+  onCancelSignInAntigravity?: () => void,
+  signingInAntigravity = false,
 ) {
   return render(
     <QuotaCard
@@ -109,6 +112,9 @@ function renderCard(
       onHover={noop}
       onRefresh={noop}
       onOpenAntigravity={onOpenAntigravity}
+      onSignInAntigravity={onSignInAntigravity}
+      onCancelSignInAntigravity={onCancelSignInAntigravity}
+      signingInAntigravity={signingInAntigravity}
     />,
   );
 }
@@ -153,29 +159,53 @@ describe("dual-service overview card", () => {
     expect(onSelect).toHaveBeenCalledWith("gemini_argon_weekly");
   });
 
-  it("isolates signed-out state to one provider without hiding the other and offers Open Antigravity", () => {
+  it("isolates signed-out state to one provider without hiding the other and offers direct Sign in plus Open Antigravity", () => {
     const onOpen = vi.fn();
-    renderCard(
-      [
-        codexSnapshot,
-        {
-          ...geminiSnapshot,
-          status: "signed_out",
-          shortWindow: null,
-          weeklyWindow: null,
-          extraPools: [],
-          message: "No active Antigravity session token found. Open Antigravity to sign in.",
-        },
-      ],
-      preferences,
-      noop,
-      onOpen,
-    );
+    const onSignIn = vi.fn();
+    const onCancel = vi.fn();
+    const signedOutSnapshots: ProviderSnapshot[] = [
+      codexSnapshot,
+      {
+        ...geminiSnapshot,
+        status: "signed_out",
+        shortWindow: null,
+        weeklyWindow: null,
+        extraPools: [],
+        message: "Antigravity is not signed in. Sign in directly from QuotaPulse.",
+      },
+    ];
+    const { rerender } = renderCard(signedOutSnapshots, preferences, noop, onOpen, noop, onSignIn, onCancel, false);
 
     expect(screen.getByRole("progressbar", { name: "Codex 5-hour quota remaining 74%" })).toBeInTheDocument();
     expect(screen.getByText("Sign in to Antigravity")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+
     fireEvent.click(screen.getByRole("button", { name: "Open Antigravity" }));
     expect(onOpen).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <QuotaCard
+        snapshots={signedOutSnapshots}
+        preferences={preferences}
+        onSelectTrayProvider={noop}
+        onToggleService={noop}
+        onLock={noop}
+        onLanguage={noop}
+        onDrag={noop}
+        onHover={noop}
+        onRefresh={noop}
+        onOpenAntigravity={onOpen}
+        onSignInAntigravity={onSignIn}
+        onCancelSignInAntigravity={onCancel}
+        signingInAntigravity
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Finish in browser…" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("opens and closes Codex reset credit expiration details", () => {

@@ -1,4 +1,5 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import { normalizeTrayProvider } from "../lib/i18n";
 import type { ProviderSnapshot, TrayProviderId, WidgetPreferences } from "../types";
 import { QuotaCard, QuotaOrb } from "./QuotaCard";
 
@@ -28,12 +29,6 @@ const geminiPreview: ProviderSnapshot = {
       displayName: "Claude & GPT",
       shortWindow: { remainingPercent: 0, resetsAt: new Date(Date.now() + 232 * 60_000).toISOString(), windowSeconds: 18_000 },
       weeklyWindow: { remainingPercent: 44, resetsAt: new Date(Date.now() + 6.9 * 86_400_000).toISOString(), windowSeconds: 604_800 },
-    },
-    {
-      id: "gemini_argon",
-      displayName: "Gemini 4 Argon",
-      shortWindow: null,
-      weeklyWindow: { remainingPercent: 100, resetsAt: null, windowSeconds: 604_800 },
     },
   ],
   resetCredits: null,
@@ -179,11 +174,11 @@ export function DesignPlayground() {
   const params = new URLSearchParams(window.location.search);
   const [trayProvider, setTrayProvider] = useState<TrayProviderId>(() => {
     const param = params.get("tray");
-    if (param === "gemini" || param === "antigravity_3p") return param;
-    return "codex";
+    return param ? normalizeTrayProvider(param) : "codex";
   });
   const screenshotMode = params.has("shot");
   const shotKind = params.get("shot");
+  const darkBackground = params.get("bg") === "dark";
   const showCreditTip = params.has("creditTip");
   const previewPreferences: WidgetPreferences = {
     locked: false,
@@ -311,7 +306,10 @@ export function DesignPlayground() {
     }
 
     return (
-      <div className="screenshot-stage" style={style}>
+      <div
+        className="screenshot-stage"
+        style={darkBackground ? { ...style, background: "#121315" } : style}
+      >
         <div className={isOrbMode(previewMode) ? "design-orb-frame" : "design-card-frame"}>
           {isOrbMode(previewMode) ? (
             <QuotaOrb

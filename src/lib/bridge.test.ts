@@ -7,9 +7,12 @@ import {
   EXPANDED_HEIGHT_ANTIGRAVITY_COMPACT,
   EXPANDED_HEIGHT_ANTIGRAVITY_WITH_POOLS,
   EXPANDED_HEIGHT_CODEX_ONLY,
+  cancelAntigravitySignIn,
   expandedHeightFor,
   fetchSnapshots,
+  getAntigravitySignInState,
   listenDesktopEvents,
+  signInAntigravity,
 } from "./bridge";
 
 const mocks = vi.hoisted(() => ({
@@ -70,20 +73,37 @@ describe("desktop bridge events", () => {
       onRefresh: vi.fn(),
       onSnapshots: vi.fn(),
       onPresentation: vi.fn(),
+      onAntigravitySignInState: vi.fn(),
     };
     const cleanup = await listenDesktopEvents(handlers);
 
     mocks.listeners.get("snapshots-changed")?.({ payload: [snapshot] });
     mocks.listeners.get("window-presentation-changed")?.({ payload: "popup" });
     mocks.listeners.get("preferences-changed")?.({ payload: preferences });
+    mocks.listeners.get("antigravity-signin-state")?.({ payload: true });
 
     expect(handlers.onSnapshots).toHaveBeenCalledWith([snapshot]);
     expect(handlers.onPresentation).toHaveBeenCalledWith("popup");
     expect(handlers.onPreferences).toHaveBeenCalledWith(preferences);
+    expect(handlers.onAntigravitySignInState).toHaveBeenCalledWith(true);
 
     cleanup();
-    expect(mocks.unlisteners).toHaveLength(4);
+    expect(mocks.unlisteners).toHaveLength(5);
     expect(mocks.unlisteners.every((unlisten) => unlisten.mock.calls.length === 1)).toBe(true);
+  });
+
+  it("invokes direct Antigravity sign-in commands", async () => {
+    mocks.invoke.mockResolvedValueOnce([snapshot]);
+    mocks.invoke.mockResolvedValueOnce(undefined);
+    mocks.invoke.mockResolvedValueOnce(true);
+
+    await expect(signInAntigravity()).resolves.toEqual([snapshot]);
+    await expect(cancelAntigravitySignIn()).resolves.toBeUndefined();
+    await expect(getAntigravitySignInState()).resolves.toBe(true);
+
+    expect(mocks.invoke).toHaveBeenNthCalledWith(1, "sign_in_antigravity");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(2, "cancel_antigravity_sign_in");
+    expect(mocks.invoke).toHaveBeenNthCalledWith(3, "get_antigravity_sign_in_state");
   });
 
   it("uses the forced refresh command only for manual refreshes", async () => {

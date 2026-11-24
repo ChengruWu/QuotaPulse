@@ -56,6 +56,8 @@ struct TrayMenuSignature {
     show_antigravity: bool,
     active_tray: String,
     autostart: bool,
+    gemini_signed_out: bool,
+    gemini_signing_in: bool,
     codex_has_short: bool,
     codex_has_weekly: bool,
     gemini_has_short: bool,
@@ -87,9 +89,14 @@ fn menu_signature_for(
     preferences: &WidgetPreferences,
     snapshots: &[ProviderSnapshot],
     autostart: bool,
+    gemini_signing_in: bool,
 ) -> TrayMenuSignature {
     let prefs = preferences.clone().normalized();
     let active_tray = resolve_tray_provider(snapshots, &prefs, chrono::Utc::now(), false);
+    let gemini_signed_out = prefs.show_antigravity
+        && snapshots
+            .iter()
+            .any(|item| item.provider == "gemini" && item.status == "signed_out");
     let codex = snapshots
         .iter()
         .find(|item| item.provider == "codex" && item.status == "ok" && item.has_any_window());
@@ -128,6 +135,8 @@ fn menu_signature_for(
         show_antigravity: prefs.show_antigravity,
         active_tray,
         autostart,
+        gemini_signed_out,
+        gemini_signing_in,
         codex_has_short,
         codex_has_weekly,
         gemini_has_short,
@@ -141,6 +150,7 @@ fn menu_signature_for(
 struct AppState {
     client: Mutex<Option<reqwest::Client>>,
     antigravity_session: Mutex<antigravity::SessionCache>,
+    antigravity_login_cancel: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     last_antigravity_fetch: Mutex<Option<Instant>>,
     preferences: Mutex<WidgetPreferences>,
     preferences_path: PathBuf,
@@ -430,6 +440,93 @@ async fn refresh_snapshots(app: AppHandle) -> Result<Vec<ProviderSnapshot>, Stri
 #[tauri::command]
 fn open_antigravity() -> Result<(), String> {
     antigravity::launch_antigravity()
+}
+
+fn is_gemini_signing_in(app: &AppHandle) -> bool {
+    app.try_state::<AppState>()
+        .and_then(|state| {
+            state
+                .antigravity_login_cancel
+                .lock()
+                .ok()
+                .map(|guard| guard.is_some())
+        })
+        .unwrap_or(false)
+}
+
+fn cancel_antigravity_sign_in_inner(app: &AppHandle) {
+    let cancel_tx = app.try_state::<AppState>().and_then(|state| {
+        state
+            .antigravity_login_cancel
+            .lock()
+            .ok()
+            .and_then(|mut guard| guard.take())
+    });
+    if let Some(tx) = cancel_tx {
+        let _ = tx.send(());
+    }
+    let _ = app.emit_to("widget", "antigravity-signin-state", false);
+    update_tray_from_cache(app);
+}
+
+async fn run_antigravity_sign_in(app: AppHandle) -> Result<Vec<ProviderSnapshot>, String> {
+    let rx = {
+        let state = app.state::<AppState>();
+        let mut guard = state
+            .antigravity_login_cancel
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        if guard.is_some() {
+            return Err("Sign-in is already in progress. Complete it in your browser.".into());
+        }
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *guard = Some(tx);
+        rx
+    };
+
+    let _ = app.emit_to("widget", "antigravity-signin-state", true);
+    update_tray_from_cache(&app);
+
+    let outcome = antigravity::sign_in_via_cli_or_launch(rx).await;
+
+    {
+        let state = app.state::<AppState>();
+        let mut guard = state
+            .antigravity_login_cancel
+            .lock()
+            .unwrap_or_else(|err| err.into_inner());
+        *guard = None;
+    }
+    let _ = app.emit_to("widget", "antigravity-signin-state", false);
+    update_tray_from_cache(&app);
+
+    match outcome {
+        Ok(antigravity::SignInOutcome::Authenticated) => {
+            if let Ok(mut guard) = app.state::<AppState>().antigravity_session.lock() {
+                *guard = antigravity::SessionCache::default();
+            }
+            Ok(fetch_and_publish(&app, true, true).await)
+        }
+        Ok(antigravity::SignInOutcome::LaunchedExternalApp | antigravity::SignInOutcome::Cancelled) => {
+            Ok(fetch_and_publish(&app, false, false).await)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[tauri::command]
+async fn sign_in_antigravity(app: AppHandle) -> Result<Vec<ProviderSnapshot>, String> {
+    run_antigravity_sign_in(app).await
+}
+
+#[tauri::command]
+fn cancel_antigravity_sign_in(app: AppHandle) {
+    cancel_antigravity_sign_in_inner(&app);
+}
+
+#[tauri::command]
+fn get_antigravity_sign_in_state(app: AppHandle) -> bool {
+    is_gemini_signing_in(&app)
 }
 
 #[tauri::command]
@@ -830,6 +927,27 @@ fn build_tray_menu(app: &AppHandle, sig: &TrayMenuSignature) -> tauri::Result<Me
         None::<&str>,
     )?;
     let refresh = MenuItem::with_id(app, "refresh", "Refresh now / 立即刷新", true, None::<&str>)?;
+    let gemini_signin = (sig.show_antigravity && (sig.gemini_signed_out || sig.gemini_signing_in))
+        .then(|| {
+            if sig.gemini_signing_in {
+                MenuItem::with_id(
+                    app,
+                    "cancel_gemini_signin",
+                    "Cancel Gemini sign-in / 取消 Gemini 登录",
+                    true,
+                    None::<&str>,
+                )
+            } else {
+                MenuItem::with_id(
+                    app,
+                    "signin_gemini",
+                    "Sign in to Gemini / 登录 Gemini",
+                    true,
+                    None::<&str>,
+                )
+            }
+        })
+        .transpose()?;
 
     let toggle_codex = CheckMenuItem::with_id(
         app,
@@ -1011,21 +1129,21 @@ fn build_tray_menu(app: &AppHandle, sig: &TrayMenuSignature) -> tauri::Result<Me
     )?;
     let quit = MenuItem::with_id(app, "quit", "Quit / 退出", true, None::<&str>)?;
 
-    Menu::with_items(
-        app,
-        &[
-            &show,
-            &refresh,
-            &services_menu,
-            &tray_source_menu,
-            &separator,
-            &check_updates,
-            &unlock,
-            &language,
-            &autostart,
-            &quit,
-        ],
-    )
+    let mut top_items: Vec<&dyn IsMenuItem<Wry>> = vec![&show, &refresh];
+    if let Some(item) = &gemini_signin {
+        top_items.push(item);
+    }
+    top_items.extend([
+        &services_menu as &dyn IsMenuItem<Wry>,
+        &tray_source_menu,
+        &separator,
+        &check_updates,
+        &unlock,
+        &language,
+        &autostart,
+        &quit,
+    ]);
+    Menu::with_items(app, &top_items)
 }
 
 fn sync_tray_menu(
@@ -1034,7 +1152,8 @@ fn sync_tray_menu(
     snapshots: &[ProviderSnapshot],
 ) {
     let autostart = app.autolaunch().is_enabled().unwrap_or(false);
-    let sig = menu_signature_for(preferences, snapshots, autostart);
+    let signing_in = is_gemini_signing_in(app);
+    let sig = menu_signature_for(preferences, snapshots, autostart, signing_in);
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -1092,7 +1211,7 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
         .unwrap_or_default();
 
     let autostart_enabled = app.autolaunch().is_enabled().unwrap_or(false);
-    let sig = menu_signature_for(&preferences, &[], autostart_enabled);
+    let sig = menu_signature_for(&preferences, &[], autostart_enabled, false);
     let menu = build_tray_menu(app.handle(), &sig)?;
     if let Ok(mut slot) = app.state::<AppState>().tray_menu_signature.lock() {
         *slot = Some(sig);
@@ -1113,6 +1232,13 @@ fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
                     let _ = fetch_and_publish(&app, true, true).await;
                 });
             }
+            "signin_gemini" => {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = run_antigravity_sign_in(app).await;
+                });
+            }
+            "cancel_gemini_signin" => cancel_antigravity_sign_in_inner(app),
             "toggle_codex" => toggle_provider_visibility(app, "codex"),
             "toggle_antigravity" => toggle_provider_visibility(app, "gemini"),
             "tray_codex" => select_tray_provider(app, "codex"),
@@ -1194,6 +1320,7 @@ pub fn run() {
             app.manage(AppState {
                 client: Mutex::new(None),
                 antigravity_session: Mutex::new(antigravity::SessionCache::default()),
+                antigravity_login_cancel: Mutex::new(None),
                 last_antigravity_fetch: Mutex::new(None),
                 preferences: Mutex::new(preferences.clone()),
                 preferences_path,
@@ -1238,6 +1365,9 @@ pub fn run() {
             get_snapshots,
             refresh_snapshots,
             open_antigravity,
+            sign_in_antigravity,
+            cancel_antigravity_sign_in,
+            get_antigravity_sign_in_state,
             get_preferences,
             set_preferences,
             set_widget_locked,
@@ -1379,14 +1509,26 @@ mod tests {
             tray_provider: "gemini_argon_weekly".into(),
             ..WidgetPreferences::default()
         };
-        let sig = menu_signature_for(&prefs, &[codex_pro, ultra], true);
+        let sig = menu_signature_for(&prefs, &[codex_pro, ultra], true, false);
         assert!(!sig.show_codex);
         assert!(sig.show_antigravity);
+        assert!(!sig.gemini_signed_out);
+        assert!(!sig.gemini_signing_in);
         assert_eq!(sig.active_tray, "gemini_weekly");
         assert!(!sig.gemini_has_short);
         assert!(sig.gemini_has_weekly);
         assert!(!sig.has_3p_short);
         assert!(sig.has_3p_weekly);
         assert!(!sig.has_argon_weekly);
+
+        let signed_out_gemini = ProviderSnapshot::failure_for(
+            "gemini",
+            "GEMINI",
+            "signed_out",
+            "Antigravity is not signed in. Sign in directly from QuotaPulse.",
+        );
+        let signed_out_sig = menu_signature_for(&prefs, &[signed_out_gemini], true, true);
+        assert!(signed_out_sig.gemini_signed_out);
+        assert!(signed_out_sig.gemini_signing_in);
     }
 }
